@@ -1,0 +1,13 @@
+name = apigee_nonmint_company
+description = Use this module if you are using Company Apps without monetization
+core = 7.x
+package = Features
+dependencies[] = apigee_company
+dependencies[] = eck
+dependencies[] = eck
+dependencies[] = entity
+dependencies[] = features
+dependencies[] = rules
+features[eck_entity_type][] = company_invitation_non_mint
+features[features_api][] = api:2
+features[rules_config][] = rules_notify_developer_on_being_added_to_the_company

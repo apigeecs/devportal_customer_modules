@@ -1,0 +1,11 @@
+<?php
+
+function apigee_nonmint_company_requirements($phase){
+    if(module_exists('devconnect_monetization')){
+        return array(
+        'title' => 'Cannot use Apigee Non-Mint Company module',
+        'description' => 'You cannot use "Apigee Non-Mint Company" module with monetization',
+        'severity' => REQUIREMENT_ERROR,
+        );
+    }
+}

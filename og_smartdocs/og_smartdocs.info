@@ -1,0 +1,6 @@
+name = SmartDocs Organic Groups integration
+description = Intergration of SmartDocs with Organic Groups Module
+package = DevConnect
+core = 7.x
+
+dependencies[] = smartdocs

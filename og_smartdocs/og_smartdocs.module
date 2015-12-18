@@ -1,0 +1,271 @@
+<?php
+
+/**
+ * This module will integrate with SmartDocs and Organic Groups
+ */
+
+
+/**
+ * Implements hook_og_permission
+ *
+ * Make sure only Group members can administer SmartDocs settings
+ */
+function og_smartdocs_og_permission() {
+  $smardocs_permissions = smartdocs_permission();
+  foreach($smardocs_permissions as &$permission) {
+    $permission['roles'] = array(OG_AUTHENTICATED_ROLE);
+  }
+  return $smardocs_permissions;
+}
+
+/**
+ * Return the list of Groups which the user can administer
+ * @param null $account
+ * @return mixed
+ */
+function _og_smartdocs_groups_to_administer($account = NULL) {
+  static $groups_to_administer;
+  if($account == NULL) {
+    global $user;
+    $account = $user;
+  }
+  if(!isset($groups_to_administer)){
+    $groups_to_administer = array();
+  }
+  if(isset($groups_to_administer[$account->uid])) {
+    return $groups_to_administer[$account->uid];
+  } else {
+    $groups_to_administer[$account->uid] = array();
+  }
+
+  foreach(og_get_entity_groups('user', $account) as $type=>$gids){
+    foreach($gids as $gid){
+      if(user_access('administer smartdocs content', $account) || og_user_access($type, $gid, 'administer smartdocs content', $account)) {
+        $groups_to_administer[$account->uid][$type][] = $gid;
+      }
+    }
+  }
+  return $groups_to_administer[$account->uid];
+}
+
+/**
+ * Implements hook_menu_alter
+ *
+ * @param $items
+ */
+function og_smartdocs_menu_alter(&$items){
+  $items['admin/content/smartdocs/models']['page callback'] = 'og_smartdocs_model_list';
+  $items['admin/content/smartdocs/models']['access callback'] = 'og_smartdocs_model_list_access_callback';
+  foreach(smartdocs_menu() as $path=>$item){
+    $position = array_search("%smartdocs_model", explode("/", $path));
+    if($position !== FALSE){
+      $items[$path]['access callback'] = 'og_smartdocs_model_access_callback';
+      $items[$path]['access arguments'] = array($position);
+    }
+  }
+  $items['admin/content/smartdocs/models/%smartdocs_model/settings']['page callback'] = 'og_smartdocs_model_settings_page';
+}
+
+/**
+ * Access callback function for models listing page
+ * @return bool
+ */
+function og_smartdocs_model_list_access_callback(){
+  $user_groups = _og_smartdocs_groups_to_administer();
+  return user_access('administer smartdocs content') || !empty($user_groups);
+}
+
+/**
+ * Access callback to verify access to SmartDocs model callback urls
+ *
+ * @param \Apigee\SmartDocs\Model $model
+ */
+function og_smartdocs_model_access_callback(\Apigee\SmartDocs\Model $model){
+  if(user_access('administer smartdocs content')) {
+    return TRUE;
+  }
+  $model_gids = _og_smartdocs_og_mapping($model->getUuid());
+  if(empty($model_gids)){
+    return FALSE;
+  }
+  $user_gids = array();
+  foreach(_og_smartdocs_groups_to_administer() as $type=>$ids){
+    $user_gids = array_merge($user_gids, $ids);
+  }
+  $arr_intersect = array_intersect($user_gids,$model_gids);
+  return !empty($arr_intersect);
+}
+
+/*
+ * Callback function to list the models
+ */
+function og_smartdocs_model_list(){
+  module_load_include('inc', 'smartdocs', 'smartdocs.admin');
+  $output = smartdocs_model_list();
+  $user_groups = _og_smartdocs_groups_to_administer();
+  $user_gids = array();
+  foreach($user_groups as $type=>$ids){
+      $user_gids = array_merge($user_gids, $ids);
+  }
+  foreach($output['table']['#rows'] as $model_id=>$data){
+    $model_guids = _og_smartdocs_og_mapping($model_id);
+    if($model_guids !== FALSE) {
+      $array_intersect = array_intersect($model_guids, $user_gids);
+      if(empty($array_intersect)){
+        unset($output['table']['#rows'][$model_id]);
+      }
+    }
+  }
+  return $output;
+}
+
+/**
+ * Store the mapping of models and Groups
+ * @param $model_id
+ * @param null $gid
+ * @return bool
+ */
+function _og_smartdocs_og_mapping($model_id, $gid = NULL){
+  $mapping = &drupal_static(__FUNCTION__, variable_get("og_smartdocs_gid_mapping", array()));
+  if($gid === NULL){
+    return isset($mapping[$model_id]) ? $mapping[$model_id] : FALSE;
+  } else {
+    if(!is_array($gid)) {
+      $gid = array($gid);
+    }
+    $mapping[$model_id] = $gid;
+    //Save the mapping to the variables table
+    variable_set("og_smartdocs_gid_mapping", $mapping);
+  }
+}
+
+/**
+ * Implements hook_form_FORM_ID_alter
+ *
+ * @param $form
+ * @param $form_state
+ */
+function og_smartdocs_form_smartdocs_add_model_alter(&$form, $form_state){
+  $form['group_ref'] = _og_smartdocs_group_widget();
+  $form['#submit'][] = 'og_smartdocs_form_smartdocs_add_model_submit';
+}
+
+/**
+ * Create a widget for the Group selection
+ *
+ * @return array
+ */
+function _og_smartdocs_group_widget(){
+  $widget = array(
+    '#type' => 'select',
+    '#title' => t('Group Membership'),
+    '#options' => array(),
+    '#weight' => -1,
+    '#multiple' => TRUE,
+    '#default_value' => array('none'),
+  );
+  if(user_access('administer smartdocs content')) {
+    $widget['#options']['none'] = '-- None --';
+  }
+  foreach(_og_smartdocs_groups_to_administer() as $key=>$ids) {
+    foreach($ids as $id) {
+      $widget['#options'][$key][$id] = node_page_title(node_load($id));
+    }
+  }
+  return $widget;
+}
+/**
+ * Submit function to store the mapping
+ *
+ * @param $form
+ * @param $form_state
+ */
+function og_smartdocs_form_smartdocs_add_model_submit($form, $form_state){
+  $values = array_keys($form_state['values']['group_ref']);
+  $values = array_diff($values, array('none'));
+  $model_id = $form_state['values']['model_id'];
+  if(!empty($model_id)) {
+    _og_smartdocs_og_mapping($model_id, $values);
+  }
+  //Pick up all the existing models and change the Group membership on them
+  $model = new \Apigee\SmartDocs\Model(devconnect_default_org_config());
+  $model->load($model_id);
+  $nids = db_select('smartdata','s')->fields('s', array('nid'))->condition('model',$model->getName())->execute()->fetchCol();
+  $nodes = node_load_multiple($nids);
+  $mapping = _og_smartdocs_og_mapping($model_id);
+  $og_group_ref = array();
+  foreach($mapping as $gid){
+    $og_group_ref[] = array('target_id' => $gid);
+  }
+  foreach($nodes as $node){
+    $node->og_group_ref[LANGUAGE_NONE] = $og_group_ref;
+    node_save($node);
+  }
+}
+
+/**
+ * Return the form for the model settings page
+ *
+ * @param $form
+ * @param $form_state
+ * @param \Apigee\SmartDocs\Model $model
+ */
+function og_smartdocs_model_settings_form($form, $form_state, \Apigee\SmartDocs\Model $model){
+  $form['group'] = array('#type'=>'fieldset', '#title' => "Organic Group Settings");
+  $form['group']['model_id'] = array('#type' => 'value', '#value' => $model->getUuid());
+  $form['group']['group_ref'] = _og_smartdocs_group_widget();
+  $form['group']['group_ref']['#default_value'] = _og_smartdocs_og_mapping($model->getUuid());
+  $form['group']['submit'] = array(
+    '#type' => 'submit',
+    '#value' => 'Save group membership',
+  );
+  $form['#submit'][] = 'og_smartdocs_form_smartdocs_add_model_submit';
+  return $form;
+}
+
+/**
+ * Page callback for the model settings page
+ *
+ * @param \Apigee\SmartDocs\Model $model
+ * @return string
+ */
+function og_smartdocs_model_settings_page(\Apigee\SmartDocs\Model $model){
+  module_load_include('inc', 'smartdocs', 'smartdocs.admin');
+  $form = drupal_get_form('og_smartdocs_model_settings_form', $model);
+  $output = "";
+  if(user_access('administer smartdocs content')){
+    $output .= smartdocs_model_settings_page($model);
+  } else {
+    $template_auth_form = drupal_get_form('smartdocs_model_template_auth', $model);
+    $output .= drupal_render($template_auth_form);
+  }
+  return $output . drupal_render($form);
+}
+
+/**
+ * Implements hook_node_presave
+ *
+ * Make sure to set the correct value of Group when rendering the node for the first time.
+ *
+ * @param $node
+ */
+function og_smartdocs_node_presave($node){
+
+  if($node->type !== 'smart_method') {
+    return;
+  }
+  $static = &drupal_static(__FUNCTION__, array());
+  $wrapper = entity_metadata_wrapper('node', $node);
+  $term = $wrapper->field_smart_method_model->value();
+  if(!isset($static[$term->name])){
+    $model = new \Apigee\SmartDocs\Model(devconnect_default_org_config());
+    $model->load($term->name);
+    $static[$term->name] = $model->getUuid();
+  }
+  $model_id = $static[$term->name];
+  $mapping = _og_smartdocs_og_mapping($model_id);
+  $node->og_group_ref[LANGUAGE_NONE] = array();
+  foreach($mapping as $gid){
+    $node->og_group_ref[LANGUAGE_NONE][] = array('target_id' => $gid);
+  }
+}
