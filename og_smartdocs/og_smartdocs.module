@@ -38,10 +38,14 @@ function _og_smartdocs_groups_to_administer($account = NULL) {
     $groups_to_administer[$account->uid] = array();
   }
 
-  foreach(og_get_entity_groups('user', $account) as $type=>$gids){
-    foreach($gids as $gid){
-      if(user_access('administer smartdocs content', $account) || og_user_access($type, $gid, 'administer smartdocs content', $account)) {
-        $groups_to_administer[$account->uid][$type][] = $gid;
+  if(user_access('administer smartdocs content', $account)) {
+    $groups_to_administer[$account->uid]['node'] = og_get_all_group("node");
+  } else {
+    foreach(og_get_entity_groups('user', $account) as $type=>$gids){
+      foreach($gids as $gid){
+        if(og_user_access($type, $gid, 'administer smartdocs content', $account)) {
+          $groups_to_administer[$account->uid][$type][] = $gid;
+        }
       }
     }
   }
@@ -102,6 +106,9 @@ function og_smartdocs_model_access_callback(\Apigee\SmartDocs\Model $model){
 function og_smartdocs_model_list(){
   module_load_include('inc', 'smartdocs', 'smartdocs.admin');
   $output = smartdocs_model_list();
+  if(user_access("administer smartdocs content")){
+    return $output;
+  }
   $user_groups = _og_smartdocs_groups_to_administer();
   $user_gids = array();
   foreach($user_groups as $type=>$ids){
@@ -257,6 +264,7 @@ function og_smartdocs_node_presave($node){
   $static = &drupal_static(__FUNCTION__, array());
   $wrapper = entity_metadata_wrapper('node', $node);
   $term = $wrapper->field_smart_method_model->value();
+  $term = $term[0];
   if(!isset($static[$term->name])){
     $model = new \Apigee\SmartDocs\Model(devconnect_default_org_config());
     $model->load($term->name);
@@ -267,5 +275,39 @@ function og_smartdocs_node_presave($node){
   $node->og_group_ref[LANGUAGE_NONE] = array();
   foreach($mapping as $gid){
     $node->og_group_ref[LANGUAGE_NONE][] = array('target_id' => $gid);
+  }
+}
+
+/**
+ * Implements hook_form_FORM_ID_alter
+ *
+ * Filter the list of SmartDocs Models that the user has access to
+ *
+ * @param $form
+ * @param $form_state
+ */
+function og_smartdocs_form_team_documentation_node_form_alter(&$form, $form_state){
+  if (user_access('administer smartdocs content')) {
+    //User has site access to all smartdocs content irrespective of groups
+    return;
+  }
+  $tids = array_keys($form['field_smart_method_model'][LANGUAGE_NONE]['#options']);
+  $tids = array_diff($tids, array('_none'));
+  $terms = taxonomy_term_load_multiple($tids);
+  $model = new \Apigee\SmartDocs\Model(devconnect_default_org_config());
+  $user_guids = _og_smartdocs_groups_to_administer();
+  foreach($terms as $term){
+    $tmp_gids = array();
+    try{
+      $model->load($term->name);
+      $gids = _og_smartdocs_og_mapping($model->getUuid());
+      $tmp_gids = array_intersect($user_guids['node'], $gids);
+    }catch(Exception $e){
+      //Ignore all exception and remove from list
+    }
+    if(empty($tmp_gids)) {
+      unset($form['field_smart_method_model'][LANGUAGE_NONE]['#options'][$term->tid]);
+    }
+
   }
 }
