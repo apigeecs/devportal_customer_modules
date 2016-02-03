@@ -84,7 +84,15 @@ function og_smartdocs_model_list_access_callback(){
  *
  * @param \Apigee\SmartDocs\Model $model
  */
-function og_smartdocs_model_access_callback(\Apigee\SmartDocs\Model $model){
+function og_smartdocs_model_access_callback($parameter){
+  $model = $parameter; //Assume it is of type \Apigee\SmartDocs\Model
+  if (is_array($parameter)) {
+    $model =  new \Apigee\SmartDocs\Model(devconnect_default_org_config());
+    \Apigee\SmartDocs\Model::fromArray($model, $parameter);
+  }
+  if(!$model instanceof \Apigee\SmartDocs\Model){
+    return FALSE;
+  }
   if(user_access('administer smartdocs content')) {
     return TRUE;
   }
