@@ -4,6 +4,9 @@
  * Code for the apigee_nonmint_company feature.
  */
 
+define('APIGEE_COMPANY_ADMIN_ROLE_NAME', 'Company Administrator');
+define('APIGEE_COMPANY_DEVELOPER_ROLE_NAME', 'Developer');
+
 include_once 'apigee_nonmint_company.features.inc';
 
 /**
@@ -38,6 +41,14 @@ function apigee_nonmint_company_entity_load($entities, $type){
  */
 function apigee_nonmint_company_menu_alter(&$items) {
   $items['users/me/monetization/company/developers'] = $items['api_company/company/developers'];
+
+  $items['api_company/developer/company/add']['access callback'] = 'user_access';
+  $items['api_company/%ctools_js/developer/%/modify_role']['access callback'] = 'user_access';
+  $items['api_company/company/developer/%/remove']['access callback'] = 'user_access';
+
+  $items['api_company/developer/company/add']['access arguments'] = array('manage company users');
+  $items['api_company/%ctools_js/developer/%/modify_role']['access arguments'] = array('manage company users');
+  $items['api_company/company/developer/%/remove']['access arguments'] = array('manage company users');
 }
 
 
@@ -117,7 +128,18 @@ function apigee_nonmint_company_form_apigee_company_company_form_submit($form, &
   if (!$saved) {
     drupal_set_message("Company not saved", 'error');
   } else {
-    entity_get_controller('apigee_company')->updateDeveloper($company_values['name'], $user->mail, 'admin');
+    entity_get_controller('apigee_company')->updateDeveloper($company_values['name'], $user->mail, APIGEE_COMPANY_ADMIN_ROLE_NAME);
     drupal_set_message("Company Created");
   }
+}
+
+/*
+ *  Implements hook_theme_registry_alter
+ */
+function apigee_nonmint_company_theme_registry_alter(&$theme_registry) {
+    $path = drupal_get_path('module', 'apigee_nonmint_company');
+    if (isset($theme_registry['apigee_company_developer_companies'])) {
+        $theme_registry['apigee_company_developer_companies']['includes'][] = $path . '/theme/apigee_nomint_company.inc';
+        $theme_registry['apigee_company_developer_companies']['function'] = 'apigee_nomint_company_developer_companies';
+    }
 }

@@ -9,3 +9,40 @@ function apigee_nonmint_company_requirements($phase){
         );
     }
 }
+
+/**
+ * Define roles and their weight.
+ */
+function apigee_nonmint_company_default_roles() {
+  $roles = array();
+  $roles['Developer'] = array(
+      'name' => 'Developer',
+      'weight' => '3',
+    );
+  $roles['Company Administrator'] = array(
+    'name' => 'Company Administrator',
+    'weight' => '4',
+  );
+  return $roles;
+}
+
+/**
+ * Implement hook_install().
+ *
+ */
+function apigee_nonmint_company_install() {
+
+  $roles = apigee_nonmint_company_default_roles();
+  foreach ($roles as $value) {
+    // Check that a role is not already exists.
+    if (!user_role_load_by_name($value)) {
+      $role = new stdClass();
+
+      $role->name = $value['name'];
+      $role->weight = $value['weight'];
+
+      // Save the Role
+      user_role_save($role);
+    }
+  }
+}
