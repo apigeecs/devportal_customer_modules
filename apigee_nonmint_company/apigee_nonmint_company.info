@@ -4,7 +4,6 @@ core = 7.x
 package = Features
 dependencies[] = apigee_company
 dependencies[] = eck
-dependencies[] = eck
 dependencies[] = entity
 dependencies[] = features
 dependencies[] = rules

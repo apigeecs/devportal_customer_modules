@@ -45,4 +45,19 @@ function apigee_nonmint_company_install() {
       user_role_save($role);
     }
   }
+  $role = user_role_load_by_name("Company Administrator");
+      db_merge('role_permission')
+        ->key(array(
+          'rid' => $role->rid,
+          'permission' => "manage company users",
+        ))
+        ->fields(array(
+          'module' => 'apigee_nonmint_company',
+        ))
+        ->execute();
+}
+
+
+function apigee_nonmint_company_update_7000(){
+    apigee_nonmint_company_install();
 }

@@ -4,9 +4,6 @@
  * Code for the apigee_nonmint_company feature.
  */
 
-define('APIGEE_COMPANY_ADMIN_ROLE_NAME', 'Company Administrator');
-define('APIGEE_COMPANY_DEVELOPER_ROLE_NAME', 'Developer');
-
 include_once 'apigee_nonmint_company.features.inc';
 
 /**
@@ -40,6 +37,9 @@ function apigee_nonmint_company_entity_load($entities, $type){
  * @param $items
  */
 function apigee_nonmint_company_menu_alter(&$items) {
+  $companies_list_callback = $items['api_company/companies/list']['page callback'];
+  $items['api_company/companies/list']['page callback'] = 'apigee_nonmint_company_company_list';
+  $items['api_company/companies/list']['page arguments'] = array($companies_list_callback) + $items['api_company/companies/list']['page arguments'];
   $items['users/me/monetization/company/developers'] = $items['api_company/company/developers'];
 
   $items['api_company/developer/company/add']['access callback'] = 'user_access';
@@ -51,6 +51,25 @@ function apigee_nonmint_company_menu_alter(&$items) {
   $items['api_company/company/developer/%/remove']['access arguments'] = array('manage company users');
 }
 
+/**
+ * Page callback for companies list.
+ *
+ * Make sure that we reset the company roles before switching to list all companies
+ *
+ * @param $callback
+ */
+function apigee_nonmint_company_company_list($callback){
+  $need_redirect = apigee_company_get_current_context_company() !== NULL;
+  if($need_redirect) {
+    //force a redirect to clean out the context and redirect back to the same page.
+    drupal_goto("api_company/company/switch/", array("query" => drupal_get_destination()));
+  }
+  if(function_exists($callback)){
+    return $callback();
+  }
+  drupal_set_message("Could not find the callback for company list", 'error');
+  return "";
+}
 
 /**
  * Controller class for Company Invitation
@@ -115,9 +134,13 @@ function apigee_nonmint_company_form_apigee_company_company_form_submit($form, &
   if(module_exists("devconnect_monetization")) {
     return;
   }
+
+  global $user;
+
   $company_values = array(
     'name' => $form_state['values']['company_internal_name'],
     'displayName' => $form_state['values']['company_display_name'],
+    'attributes' => array('ADMIN_EMAIL' => $user->mail),
   );
 
   //$company = new ApigeeCompanyEntity($company_values);
@@ -137,9 +160,14 @@ function apigee_nonmint_company_form_apigee_company_company_form_submit($form, &
  *  Implements hook_theme_registry_alter
  */
 function apigee_nonmint_company_theme_registry_alter(&$theme_registry) {
-    $path = drupal_get_path('module', 'apigee_nonmint_company');
-    if (isset($theme_registry['apigee_company_developer_companies'])) {
-        $theme_registry['apigee_company_developer_companies']['includes'][] = $path . '/theme/apigee_nomint_company.inc';
-        $theme_registry['apigee_company_developer_companies']['function'] = 'apigee_nomint_company_developer_companies';
-    }
+  $path = drupal_get_path('module', 'apigee_nonmint_company');
+  if (isset($theme_registry['apigee_company_developer_companies'])) {
+    $theme_registry['apigee_company_developer_companies']['includes'][] = $path . '/theme/apigee_nonmint_company.inc';
+    $theme_registry['apigee_company_developer_companies']['function'] = 'apigee_nonmint_company_developer_companies';
+  }
+  if(isset($theme_registry['apigee_company_switcher'])){
+    $theme_registry['apigee_company_switcher']['includes'][] = $path . '/theme/apigee_nonmint_company.inc';
+    $theme_registry['apigee_company_switcher']['function'] = 'apigee_nonmint_company_switcher';
+  }
+
 }
