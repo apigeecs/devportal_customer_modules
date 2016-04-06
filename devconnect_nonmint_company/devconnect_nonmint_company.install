@@ -1,0 +1,148 @@
+<?php
+
+/**
+ * Implements hook_requirements().
+ */
+function devconnect_nonmint_company_requirements($phase){
+  $t = get_t();
+  if (module_exists('devconnect_monetization')){
+    return array(
+      'title' => $t('Cannot use @module module', array('@module' => 'DevConnect Company Apps')),
+      'description' => $t('You cannot use “@module” module with “@monetization” enabled.', array('@module' => 'DevConnect Company Apps', '@monetization' => 'DevConnect Monetization')),
+      'severity' => REQUIREMENT_ERROR,
+    );
+  }
+  if (module_exists('apigee_nonmint_company')){
+    return array(
+      'title' => $t('Cannot use @module module', array('@module' => 'DevConnect Company Apps')),
+      'description' => $t('You cannot use “@module” module with “@monetization” enabled.', array('@module' => 'DevConnect Company Apps', '@monetization' => 'Apigee Non-Mint Company')),
+      'severity' => REQUIREMENT_ERROR,
+    );
+  }
+}
+
+function devconnect_nonmint_company_schema() {
+  $schema['devconnect_nonmint_company_invitations'] = array(
+    'description' => 'Stores company invitations for non-mint companies',
+    'fields' => array(
+      'companyId' => array(
+        'description' => 'ID of company',
+        'type' => 'varchar',
+        'length' => 255,
+        'not null' => TRUE,
+      ),
+      'developerId' => array(
+        'description' => 'ID of developer',
+        'type' => 'varchar',
+        'length' => 255,
+        'not null' => TRUE,
+      ),
+      'orgId' => array(
+        'description' => 'ID of organization',
+        'type' => 'varchar',
+        'length' => 255,
+        'default' => '',
+      ),
+      'id' => array(
+        'description' => '(unused)',
+        'type' => 'varchar',
+        'length' => 255,
+        'default' => '',
+      ),
+      'created_at' => array(
+        'description' => 'Created-at Unix timestamp',
+        'type' => 'int',
+        'not null' => TRUE,
+        'default' => 0,
+      ),
+      'lastmodified_at' => array(
+        'description' => 'Modified-at Unix timestamp',
+        'type' => 'int',
+        'not null' => TRUE,
+        'default' => 0,
+      ),
+      'requestor' => array(
+        'description' => 'Entity initiating the request',
+        'type' => 'varchar',
+        'length' => 255,
+        'default' => '',
+      ),
+      'state' => array(
+        'description' => 'Current state of the request',
+        'type' => 'varchar',
+        'length' => 255,
+        'default' => '',
+      ),
+      'type' => array(
+        'description' => 'Type of request',
+        'type' => 'varchar',
+        'length' => 255,
+        'default' => '',
+      ),
+      'sourceDeveloperEmail' => array(
+        'description' => 'source developer email address',
+        'type' => 'varchar',
+        'length' => 255,
+        'default' => '',
+      ),
+      'responseUrl' => array(
+        'description' => 'Response URL to be sent in email to developer',
+        'type' => 'varchar',
+        'length' => 255,
+        'default' => '',
+      ),
+    ),
+    'primary key' => array('companyId', 'developerId'),
+  );
+
+  return $schema;
+}
+
+/**
+ * Defines roles and their weight.
+ */
+function _devconnect_nonmint_company_default_roles() {
+  $roles = array();
+  $roles['Developer'] = array(
+    'name' => 'Developer',
+    'weight' => '3',
+  );
+  $roles['Company Administrator'] = array(
+    'name' => 'Company Administrator',
+    'weight' => '4',
+  );
+  return $roles;
+}
+
+/**
+ * Implements hook_install().
+ *
+ */
+function devconnect_nonmint_company_install() {
+
+  $roles = _devconnect_nonmint_company_default_roles();
+  foreach ($roles as $name => $value) {
+    // Check that a role does not already exist.
+    if (!user_role_load_by_name($name)) {
+      $role = new stdClass();
+
+      $role->name = $value['name'];
+      $role->weight = $value['weight'];
+
+      // Save the Role
+      user_role_save($role);
+    }
+  }
+  $role = user_role_load_by_name('Company Administrator');
+  if ($role) {
+    db_merge('role_permission')
+      ->key(array(
+        'rid' => $role->rid,
+        'permission' => 'manage company users',
+      ))
+      ->fields(array(
+        'module' => 'devconnect_nonmint_company',
+      ))
+      ->execute();
+  }
+}

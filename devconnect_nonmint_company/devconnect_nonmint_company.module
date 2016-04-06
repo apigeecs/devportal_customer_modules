@@ -1,0 +1,103 @@
+<?php
+/**
+ * @file
+ * Code for the devconnect_nonmint_company module.
+ */
+
+/**
+ * Implements hook_entity_info_alter().
+ */
+function devconnect_nonmint_company_entity_info_alter(array &$info) {
+  $info['apigee_company_invitation']['controller class'] = 'EntityAPIController';
+  $info['apigee_company_invitation']['base table'] = 'devconnect_nonmint_company_invitations';
+  $info['apigee_company_invitation']['entity keys'] = array('companyId', 'developerId');
+}
+
+/**
+ * Implements hook_menu_alter().
+ */
+function devconnect_nonmint_company_menu_alter(array &$items) {
+  $companies_list_callback = $items['api_company/companies/list']['page callback'];
+  $items['api_company/companies/list']['page callback'] = 'devconnect_nonmint_company_company_list';
+  $items['api_company/companies/list']['page arguments'] = array($companies_list_callback) + $items['api_company/companies/list']['page arguments'];
+  // TODO FIXME
+  $items['users/me/monetization/company/developers'] = $items['api_company/company/developers'];
+
+  $items['api_company/developer/company/add']['access callback'] = 'user_access';
+  $items['api_company/developer/company/add']['access arguments'] = array('manage company users');
+
+  $items['api_company/%ctools_js/developer/%/modify_role']['access callback'] = 'user_access';
+  $items['api_company/%ctools_js/developer/%/modify_role']['access arguments'] = array('manage company users');
+
+  $items['api_company/company/developer/%/remove']['access callback'] = 'user_access';
+  $items['api_company/company/developer/%/remove']['access arguments'] = array('manage company users');
+}
+
+/**
+ * Page callback for companies list.
+ *
+ * Make sure that we reset the company roles before switching to list all companies
+ *
+ * @param $callback
+ */
+function devconnect_nonmint_company_company_list($callback){
+  $need_redirect = apigee_company_get_current_context_company() !== NULL;
+  if ($need_redirect) {
+    //force a redirect to clean out the context and redirect back to the same page.
+    drupal_goto("api_company/company/switch/", array("query" => drupal_get_destination()));
+  }
+  if (function_exists($callback)){
+    return $callback();
+  }
+  drupal_set_message("Could not find the callback for company list", 'error');
+  return "";
+}
+
+
+function devconnect_nonmint_company_form_apigee_company_company_form_alter(&$form, $form_state){
+  $form['actions']['submit']['#submit'][] = 'devconnect_nonmint_company_form_apigee_company_company_form_submit';
+}
+
+/**
+ * Form API Callback: Handles the submit for the company create form.
+ */
+function devconnect_nonmint_company_form_apigee_company_company_form_submit($form, &$form_state) {
+
+  if (module_exists('devconnect_monetization')) {
+    return;
+  }
+  $mail = $GLOBALS['user']->mail;
+
+  $company_values = array(
+    'name' => $form_state['values']['company_internal_name'],
+    'displayName' => $form_state['values']['company_display_name'],
+    'attributes' => array('ADMIN_EMAIL' => $mail),
+  );
+
+  $company_entity = entity_create('apigee_company', $company_values);
+  $saved = entity_save('apigee_company', $company_entity);
+
+  if (!$saved) {
+    drupal_set_message(t('Company not saved'), 'error');
+  }
+  else {
+    entity_get_controller('apigee_company')->updateDeveloper($company_values['name'], $mail, APIGEE_COMPANY_ADMIN_ROLE_NAME);
+    drupal_set_message(t('Company Created'));
+  }
+}
+
+/*
+ *  Implements hook_theme_registry_alter().
+ */
+function devconnect_nonmint_company_theme_registry_alter(&$theme_registry) {
+  $path = drupal_get_path('module', 'devconnect_nonmint_company');
+  if (isset($theme_registry['apigee_company_developer_companies'])) {
+    $theme_registry['apigee_company_developer_companies']['includes'][] = $path . '/devconnect_nonmint_company.theme.inc';
+    $theme_registry['apigee_company_developer_companies']['function'] = 'devconnect_nonmint_company_developer_companies';
+  }
+  if (isset($theme_registry['apigee_company_switcher'])) {
+    $theme_registry['apigee_company_switcher']['includes'][] = $path . '/devconnect_nonmint_company.theme.inc';
+    $theme_registry['apigee_company_switcher']['function'] = 'devconnect_nonmint_company_switcher';
+  }
+
+}
