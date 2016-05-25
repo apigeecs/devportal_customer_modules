@@ -82,35 +82,73 @@ function canonical_hostname_tokens_tokens_alter(array &$replacements, array $con
   if (empty($hostname)) {
     return;
   }
-  $hostname_lc = strtolower($hostname);
   $enforce_https = variable_get('canonical_hostname_tokens_enforce_https', FALSE);
 
   foreach ($token_names as $token_name) {
     $token_name = '[' . $token_name . ']';
     if (array_key_exists($token_name, $replacements) && !empty($replacements[$token_name])) {
-      $parts = parse_url($replacements[$token_name]);
-      if (empty($parts) || empty($parts['host']) || strtolower($parts['host']) == $hostname_lc) {
-        continue;
+      $new_url = _canonical_hostname_tokens_alter_url($replacements[$token_name], $hostname, $enforce_https);
+      if ($new_url !== FALSE) {
+        $replacements[$token_name] = $new_url;
       }
-      $parts['host'] = $hostname;
-      if ($enforce_https) {
-        $parts['scheme'] = 'https';
-      }
-      $replacements[$token_name] = _canonical_hostname_tokens_build_url($parts);
     }
   }
 }
 
 /**
- * Builds a URL string from the parts returned from parse_url().
+ * Implements hook_mail_alter().
  *
- * @param array $parts
- *   Array of strings returned from parse_url().
- *
- * @return string
- *   Fully-qualified URL.
+ * Since user:one-time-login-url and user:cancel-url are implemented in an
+ * un-alterable way, we brute-force mail messages to comply.
  */
-function _canonical_hostname_tokens_build_url(array $parts) {
+function canonical_hostname_tokens_mail_alter(&$message) {
+  $hostname = variable_get('canonical_hostname_tokens_hostname', NULL);
+  if (empty($hostname)) {
+    return;
+  }
+  $enforce_https = variable_get('canonical_hostname_tokens_enforce_https', FALSE);
+
+  $body =& $message['body'][0];
+  $patterns = array(
+    '!https?://[A-Za-z0-9.-]+(:[0-9]+)?/user/reset/[0-9]+/[0-9]+/[A-Za-z0-9_-]+!',
+    '!https?://[A-Za-z0-9.-]+(:[0-9]+)?/user/[0-9]+/cancel/confirm/[0-9]+/[A-Za-z0-9_-]+!',
+  );
+
+  foreach ($patterns as $pattern) {
+    if (preg_match_all($pattern, $body, $matches, PREG_SET_ORDER)) {
+      foreach ($matches as $match) {
+        $new_url = _canonical_hostname_tokens_alter_url($match[0], $hostname, $enforce_https);
+        if ($new_url) {
+          $body = str_replace($match[0], $new_url, $body);
+        }
+      }
+    }
+  }
+}
+
+/**
+ * Returns a URL with the hostname altered, or FALSE if no change is possible.
+ *
+ * @param string $url
+ *   The URL to be altered.
+ * @param string $hostname
+ *   The hostname to be replaced into the URL.
+ * @param bool $enforce_https
+ *   If TRUE, force new URL to be served via https.
+ *
+ * @return bool|string
+ *   The rewritten URL, or FALSE if the URL could not be adequately parsed.
+ */
+function _canonical_hostname_tokens_alter_url($url, $hostname, $enforce_https) {
+  $parts = parse_url($url);
+  if (empty($parts) || empty($parts['host'])) {
+    return FALSE;
+  }
+  $parts['host'] = $hostname;
+  if ($enforce_https) {
+    $parts['scheme'] = 'https';
+  }
+
   if (!isset($parts['scheme'])) {
     $parts['scheme'] = isset($_SERVER['HTTPS']) && strtolower($_SERVER['HTTPS']) == 'on' ? 'https' : 'http';
   }
