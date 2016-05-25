@@ -1,0 +1,133 @@
+<?php
+/**
+ * @file
+ * Enables configuration of a canonical hostname to be used in tokens.
+ */
+
+/**
+ * Implements hook_menu().
+ */
+function canonical_hostname_tokens_menu() {
+  $items = array();
+  $items['admin/config/system/canonical-hostname'] = array(
+    'title' => 'Canonical hostname',
+    'description' => 'Allows administration of canonical hostname tokens.',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('canonical_hostname_tokens_admin_form'),
+    'access arguments' => array('access administration pages'),
+    'file' => 'canonical_hostname_tokens.admin.inc',
+  );
+  return $items;
+}
+
+/**
+ * Implements hook_tokens_alter().
+ */
+function canonical_hostname_tokens_tokens_alter(array &$replacements, array $context) {
+  static $token_names = array(
+    'current-page:url',
+    'current-page:url:absolute',
+    'current-page:url:unaliased:absolute',
+
+    'current-user:cancel-url',
+    'current-user:edit-url',
+    'current-user:one-time-login-url',
+    'current-user:original:cancel-url',
+    'current-user:original:edit-url',
+    'current-user:original:one-time-login-url',
+    'current-user:original:url',
+    'current-user:original:url:absolute',
+    'current-user:original:url:unaliased',
+    'current-user:original:validate-url',
+    'current-user:url',
+    'current-user:url:absolute',
+    'current-user:url:unaliased',
+    'current-user:url:unaliased:absolute',
+    'current-user:validate-url',
+
+    'site:current-page:url',
+    'site:current-user:cancel-url',
+    'site:current-user:edit-url',
+    'site:current-user:one-time-login-url',
+    'site:current-user:original:cancel-url',
+    'site:current-user:original:edit-url',
+    'site:current-user:original:one-time-login-url',
+    'site:current-user:original:url',
+    'site:current-user:original:validate-url',
+    'site:current-user:url',
+    'site:current-user:url:absolute',
+    'site:current-user:url:unaliased',
+    'site:current-user:validate-url',
+    'site:login-url',
+    'site:url',
+
+    'user:cancel-url',
+    'user:edit-url',
+    'user:one-time-login-url',
+    'user:original:cancel-url',
+    'user:original:edit-url',
+    'user:original:one-time-login-url',
+    'user:original:url',
+    'user:original:url:absolute',
+    'user:original:url:unaliased',
+    'user:original:validate-url',
+    'user:url',
+    'user:url:absolute',
+    'user:url:unaliased',
+    'user:url:unaliased:absolute',
+    'user:validate-url',
+  );
+
+  $hostname = variable_get('canonical_hostname_tokens_hostname', NULL);
+  if (empty($hostname)) {
+    return;
+  }
+  $hostname_lc = strtolower($hostname);
+  $enforce_https = variable_get('canonical_hostname_tokens_enforce_https', FALSE);
+
+  foreach ($token_names as $token_name) {
+    $token_name = '[' . $token_name . ']';
+    if (array_key_exists($token_name, $replacements) && !empty($replacements[$token_name])) {
+      $parts = parse_url($replacements[$token_name]);
+      if (empty($parts) || empty($parts['host']) || strtolower($parts['host']) == $hostname_lc) {
+        continue;
+      }
+      $parts['host'] = $hostname;
+      if ($enforce_https) {
+        $parts['scheme'] = 'https';
+      }
+      $replacements[$token_name] = _canonical_hostname_tokens_build_url($parts);
+    }
+  }
+}
+
+/**
+ * Builds a URL string from the parts returned from parse_url().
+ *
+ * @param array $parts
+ *   Array of strings returned from parse_url().
+ *
+ * @return string
+ *   Fully-qualified URL.
+ */
+function _canonical_hostname_tokens_build_url(array $parts) {
+  if (!isset($parts['scheme'])) {
+    $parts['scheme'] = isset($_SERVER['HTTPS']) && strtolower($_SERVER['HTTPS']) == 'on' ? 'https' : 'http';
+  }
+  $url = $parts['scheme'] . '://' . $parts['host'];
+  if (!empty($parts['port'])) {
+    if (($parts['scheme'] == 'http' && $parts['port'] != 80) || ($parts['scheme'] == 'https' && $parts['port'] != 443)) {
+      $url .= ':' . $parts['port'];
+    }
+  }
+  if (!empty($parts['path'])) {
+    $url .= $parts['path'];
+  }
+  if (!empty($parts['query'])) {
+    $url .= '?' . $parts['query'];
+  }
+  if (!empty($parts['fragment'])) {
+    $url .= '#' . $parts['fragment'];
+  }
+  return $url;
+}

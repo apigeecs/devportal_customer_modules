@@ -1,0 +1,5 @@
+name = Canonical Hostname Tokens
+description = Modifies tokens containing URLs to point to a canonical hostname.
+core = 7.x
+version = "7.x-1.x-dev"
+
