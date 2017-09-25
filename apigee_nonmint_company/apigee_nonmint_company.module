@@ -11,9 +11,11 @@ include_once 'apigee_nonmint_company.features.inc';
 function apigee_nonmint_company_permission() {
   $permissions = array();
 
+  // Note: This displays a list of companies, but in order to manage companies
+  // in the list, you will need manage permissions from apigee_company as well.
   $permissions['manage all companies'] = array(
     'title' => t('Manage all companies'),
-    'description' => t('Invite, remove and manage roles for all companies.'),
+    'description' => t('Display admin list all companies.'),
   );
   return $permissions;
 }
