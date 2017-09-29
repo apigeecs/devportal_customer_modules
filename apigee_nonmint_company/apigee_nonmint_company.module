@@ -6,6 +6,38 @@
 include_once 'apigee_nonmint_company.features.inc';
 
 /**
+ * Implements hook_permission().
+ */
+function apigee_nonmint_company_permission() {
+  $permissions = array();
+
+  // Note: This displays a list of companies, but in order to manage companies
+  // in the list, you will need manage permissions from apigee_company as well.
+  $permissions['manage all companies'] = array(
+    'title' => t('Manage all companies'),
+    'description' => t('Display admin list all companies.'),
+  );
+  return $permissions;
+}
+
+/**
+ * Implements hook_menu().
+ */
+function apigee_nonmint_company_menu() {
+  $items = array();
+
+  $items['admin/content/companies'] = array(
+    'title' => 'Companies',
+    'description' => 'Manage all companies.',
+    'access arguments' => array('manage all companies'),
+    'page callback' => 'apigee_nonmint_company_all_companies',
+    'type' => MENU_NORMAL_ITEM,
+  );
+
+  return $items;
+}
+
+/**
  * Implements hook_entity_info_alter
  *
  * Overwrite the apigee_company_invitation controller with the custom entity
@@ -174,3 +206,41 @@ function apigee_nonmint_company_theme_registry_alter(&$theme_registry) {
   }
 
 }
+
+/**
+ * Utility function that returns and indexed array of all company objects.
+ *
+ * @param array $company_ids
+ *   An indexed array of company machine names.
+ *
+ * @return array
+ *   An array of company entities.
+ */
+function apigee_nonmint_company_get_all_company_objects() {
+  $company_list = entity_load('apigee_company');
+  return $company_list;
+}
+
+/**
+ * Get a themed list of all companies.
+ *
+ * @global object $user
+ *
+ * @return string
+ *   Themed html for the company list and invitations.
+ */
+function apigee_nonmint_company_all_companies() {
+  $items_per_page = variable_get('apigee_nonmint_company_items_per_page', 20);
+  $company_objects = apigee_nonmint_company_get_all_company_objects();
+  $items_total = count($company_objects);
+
+  $current_page = pager_default_initialize($items_total, $items_per_page);
+  // Querying for a subset would require circumventing or modifying the SDK
+  // so we return everything and then slice to keep the UI manageable.
+  $company_objects = array_slice($company_objects, ($current_page * $items_per_page), $items_per_page);
+
+  $output = theme('apigee_company_developer_companies', array('companies' => $company_objects));
+  $output .= theme('pager', array('quantity' => $items_total));
+  return $output;
+}
+
