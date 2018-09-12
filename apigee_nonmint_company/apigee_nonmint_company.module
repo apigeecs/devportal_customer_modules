@@ -3,6 +3,7 @@
  * @file
  * Code for the apigee_nonmint_company feature.
  */
+
 include_once 'apigee_nonmint_company.features.inc';
 
 /**
@@ -38,24 +39,20 @@ function apigee_nonmint_company_menu() {
 }
 
 /**
- * Implements hook_entity_info_alter
- *
- * Overwrite the apigee_company_invitation controller with the custom entity
- * which saves data to drupal instead of backend
- * @param $info
+ * Implements hook_entity_info_alter().
  */
 function apigee_nonmint_company_entity_info_alter(&$info) {
+
+  // Overwrite the apigee_company_invitation controller with the custom entity
+  // which saves data to drupal instead of backend
   $info['apigee_company_invitation']['controller class'] = 'ApigeeNonMintCompanyInvitation';
 }
 
 /**
- * Implements hook_entity_load
- *
- * @param $entities
- * @param $type
+ * Implements hook_entity_load().
  */
 function apigee_nonmint_company_entity_load($entities, $type){
-  if($type == 'company_invitation_non_mint') {
+  if ($type == 'company_invitation_non_mint') {
     foreach($entities as &$entity){
       $entity->developerId = $entity->developer_id;
       $entity->companyId = $entity->company_id;
@@ -64,8 +61,7 @@ function apigee_nonmint_company_entity_load($entities, $type){
 }
 
 /**
- * Implements hook_menu_alter
- * @param $items
+ * Implements hook_menu_alter().
  */
 function apigee_nonmint_company_menu_alter(&$items) {
   $companies_list_callback = $items['api_company/companies/list']['page callback'];
@@ -88,14 +84,15 @@ function apigee_nonmint_company_menu_alter(&$items) {
  * Make sure that we reset the company roles before switching to list all companies
  *
  * @param $callback
+ * @return string
  */
 function apigee_nonmint_company_company_list($callback){
   $need_redirect = apigee_company_get_current_context_company() !== NULL;
-  if($need_redirect) {
+  if ($need_redirect) {
     //force a redirect to clean out the context and redirect back to the same page.
     drupal_goto("api_company/company/switch/", array("query" => drupal_get_destination()));
   }
-  if(function_exists($callback)){
+  if( function_exists($callback)) {
     return $callback();
   }
   drupal_set_message("Could not find the callback for company list", 'error');
@@ -103,70 +100,17 @@ function apigee_nonmint_company_company_list($callback){
 }
 
 /**
- * Controller class for Company Invitation
- *
- * Class ApigeeNonMintCompanyInvitation
+ *  Implements hook_form_FORM_ID_alter().
  */
-class ApigeeNonMintCompanyInvitation extends ApigeeCompanyInvitationController{
-  public function load($ids = array(), $conditions = array()) {
-    if(isset($conditions['companyId'])) {
-      $conditions['company_id'] = $conditions['companyId'];
-      unset($conditions['companyId']);
-    }
-    if(isset($conditions['developerId'])) {
-      $conditions['developer_id'] = $conditions['developerId'];
-      unset($conditions['developerId']);
-    }
-    $entities =  entity_load('company_invitation_non_mint', empty($ids)? FALSE : $ids , $conditions);
-    $new_entities = [];
-    foreach($entities as $id=>$entity){
-        $new_entities[$id] = new ApigeeCompanyInvitationEntity($entity);
-    }
-    return $new_entities;
-  }
-  public function save($entity) {
-    $company = entity_load_single('apigee_company', $entity->companyId);
-    $exists = FALSE;
-    foreach($company->developers as $role => $developers){
-      if(in_array($entity->developerId, $developers)) {
-        drupal_set_message("Developer already exists in this company.", 'error');
-        $exists = TRUE;
-        break;
-      }
-    }
-    if(!$exists) {
-      $config = devconnect_default_org_config();
-      $entity->company_id = $entity->companyId;
-      $entity->developer_id = $entity->developerId;
-      $entity->org = $config->orgName;
-      if($entity->is_new) {
-        $entity->state  = "PENDING";
-      }
-      $_user = user_load_by_mail($entity->sourceDeveloperEmail);
-      $entity->source_developer = $_user->uid;
-      $entity->invitation_type = $entity->type;
-      $entity->type = 'company_invitation_non_mint';
-      $entity = (object) ((array) $entity);
-      return entity_save('company_invitation_non_mint', $entity);
-    }
-  }
-  public function delete($ids){
-    return entity_delete_multiple('company_invitation_non_mint', $ids);
-  }
-}
-
-
 function apigee_nonmint_company_form_apigee_company_company_form_alter(&$form, $form_state){
   $form['actions']['submit']['#submit'][] = 'apigee_nonmint_company_form_apigee_company_company_form_submit';
 }
-
 
 /**
  * Form API Callback: Handles the submit for the company create form.
  */
 function apigee_nonmint_company_form_apigee_company_company_form_submit($form, &$form_state) {
-
-  if(module_exists("devconnect_monetization")) {
+  if (module_exists("devconnect_monetization")) {
     return;
   }
 
@@ -178,30 +122,30 @@ function apigee_nonmint_company_form_apigee_company_company_form_submit($form, &
     'attributes' => array('ADMIN_EMAIL' => $user->mail),
   );
 
-  //$company = new ApigeeCompanyEntity($company_values);
   $company_entity = entity_create('apigee_company', $company_values);
   $saved = entity_save('apigee_company', $company_entity);
   global $user;
 
   if (!$saved) {
     drupal_set_message("Company not saved", 'error');
-  } else {
+  }
+  else {
     entity_get_controller('apigee_company')->updateDeveloper($company_values['name'], $user->mail, APIGEE_COMPANY_ADMIN_ROLE_NAME);
     drupal_set_message("Company Created");
   }
 }
 
-/*
- *  Implements hook_theme_registry_alter
+/**
+ *  Implements hook_theme_registry_alter().
  */
 function apigee_nonmint_company_theme_registry_alter(&$theme_registry) {
   $path = drupal_get_path('module', 'apigee_nonmint_company');
   if (isset($theme_registry['apigee_company_developer_companies'])) {
-    $theme_registry['apigee_company_developer_companies']['includes'][] = $path . '/theme/apigee_nonmint_company.inc';
+    $theme_registry['apigee_company_developer_companies']['includes'][] = $path . '/apigee_nonmint_company.theme.inc';
     $theme_registry['apigee_company_developer_companies']['function'] = 'apigee_nonmint_company_developer_companies';
   }
-  if(isset($theme_registry['apigee_company_switcher'])){
-    $theme_registry['apigee_company_switcher']['includes'][] = $path . '/theme/apigee_nonmint_company.inc';
+  if (isset($theme_registry['apigee_company_switcher'])) {
+    $theme_registry['apigee_company_switcher']['includes'][] = $path . '/apigee_nonmint_company.theme.inc';
     $theme_registry['apigee_company_switcher']['function'] = 'apigee_nonmint_company_switcher';
   }
 
@@ -209,9 +153,6 @@ function apigee_nonmint_company_theme_registry_alter(&$theme_registry) {
 
 /**
  * Utility function that returns and indexed array of all company objects.
- *
- * @param array $company_ids
- *   An indexed array of company machine names.
  *
  * @return array
  *   An array of company entities.
@@ -228,6 +169,7 @@ function apigee_nonmint_company_get_all_company_objects() {
  *
  * @return string
  *   Themed html for the company list and invitations.
+ * @throws Exception
  */
 function apigee_nonmint_company_all_companies() {
   $items_per_page = variable_get('apigee_nonmint_company_items_per_page', 20);
