@@ -10,3 +10,4 @@ dependencies[] = rules
 features[eck_entity_type][] = company_invitation_non_mint
 features[features_api][] = api:2
 features[rules_config][] = rules_notify_developer_on_being_added_to_the_company
+files[] = ApigeeNonMintCompanyInvitation.inc
